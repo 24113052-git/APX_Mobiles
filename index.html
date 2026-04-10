@@ -23,6 +23,7 @@
             --text: #f1f5f9;
             --muted: #94a3b8;
             --overlay: rgba(2, 6, 23, 0.95);
+            --error: #ff4d4d; /* Added error color */
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
@@ -47,7 +48,9 @@
 
         .nav-links { display: flex; gap: 25px; align-items: center; }
         .nav-links a { text-decoration: none; color: var(--muted); font-weight: 500; transition: 0.3s; }
-        .nav-links a:hover { color: var(--primary); }
+        .nav-links a:hover, .active-user { color: var(--primary); }
+
+        .nav-btns { display: flex; gap: 15px; align-items: center; }
 
         .cart-status {
             background: var(--primary);
@@ -142,7 +145,7 @@
 
         .hidden { display: none !important; }
 
-        /* Modal (Cart Window) Styling */
+        /* Modal Styling */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0;
@@ -153,7 +156,6 @@
             justify-content: center;
             align-items: center;
             z-index: 2000;
-            transition: 0.3s;
         }
 
         .modal-content {
@@ -177,6 +179,23 @@
 
         .close-modal { font-size: 1.8rem; cursor: pointer; color: var(--muted); }
         .close-modal:hover { color: #ff4d4d; }
+
+        /* Login Form Specifics */
+        .login-form input {
+            width: 100%; padding: 12px; margin: 10px 0;
+            background: #1e293b; border: 1px solid #334155;
+            color: white; border-radius: 8px; outline: none;
+        }
+        .captcha-box {
+            display: flex; align-items: center; gap: 10px; margin: 10px 0;
+        }
+        #captcha-display {
+            background: #334155; padding: 5px 15px;
+            font-weight: bold; letter-spacing: 5px;
+            font-style: italic; color: var(--primary);
+            user-select: none; border-radius: 5px;
+        }
+        .error-msg { color: var(--error); font-size: 0.8rem; margin-bottom: 10px; }
 
         .cart-item-row {
             display: flex;
@@ -217,11 +236,35 @@
         <a href="#shop">Shop</a>
         <a href="#about">About</a>
         <a href="#contact">Contact</a>
-        <div class="cart-status" id="cart-trigger">
-            🛒 <span id="cart-count">0</span>
+        <div class="nav-btns">
+            <div class="cart-status" id="cart-trigger">
+                🛒 <span id="cart-count">0</span>
+            </div>
+            <button class="btn" id="login-nav-btn" style="width: auto;">Login</button>
+            <span id="user-display" class="hidden active-user">Hi, Aniruddha</span>
         </div>
     </div>
 </nav>
+
+<div id="login-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h2 style="margin-bottom: 20px;">Secure Login</h2>
+        <div class="login-form">
+            <input type="text" id="login-username" placeholder="Username">
+            <input type="password" id="login-password" placeholder="Password">
+            
+            <div class="captcha-box">
+                <div id="captcha-display"></div>
+                <button class="qty-btn" onclick="generateCaptcha()" style="border:none; cursor:pointer; background:none; color:var(--primary)">🔄</button>
+            </div>
+            <input type="text" id="captcha-input" placeholder="Enter CAPTCHA">
+            
+            <p id="login-error" class="error-msg hidden">Invalid credentials or CAPTCHA</p>
+            <button class="btn" style="width:100%" onclick="handleLogin()">Sign In</button>
+            <button class="btn" style="width:100%; background:transparent; color:var(--muted); margin-top:10px;" onclick="toggleLoginModal()">Cancel</button>
+        </div>
+    </div>
+</div>
 
 <div id="cart-modal" class="modal-overlay hidden">
     <div class="modal-content">
@@ -229,8 +272,7 @@
             <h3>Shopping Cart</h3>
             <span class="close-modal" id="close-modal">&times;</span>
         </div>
-        <div id="cart-items-list">
-            </div>
+        <div id="cart-items-list"></div>
         <div class="modal-footer">
             <div class="total-price">Total: ₹<span id="total-amount">0</span></div>
             <button class="btn" style="width: auto;" onclick="alert('Thank you for your order!')">Checkout</button>
@@ -334,7 +376,7 @@
 
 <section class="section" id="about">
     <h2>About APX Mobiles</h2>
-    <p>APX Mobiles is your trusted destination for the latest and most premium smartphones. We provide top-quality devices from leading brands like Apple and Samsung. Our goal is to deliver the best technology at competitive prices with excellent customer service.</p>
+    <p>APX Mobiles is your trusted destination for the latest and most premium smartphones. We provide top-quality devices from leading brands like Apple and Samsung. Our goal is to deliver the best technology at competitive prices with excellent customer service..</p>
 </section>
 
 <section class="section" id="contact">
@@ -347,10 +389,65 @@
 </section>
 
 <footer>
-    <p>© 2026 APX Mobiles | All Rights Reserved</p>
+    <p>© 2026 APX Mobiles | Secure Environment</p>
 </footer>
 
 <script>
+    // --- SECURITY DATA ---
+    const VALID_USER = "Aniruddha";
+    const HASHED_PW = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"; 
+    let currentCaptcha = "";
+
+    // --- Hashing Function (SHA-256) ---
+    async function hashPassword(string) {
+        const utf8 = new TextEncoder().encode(string);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', utf8);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // --- CAPTCHA Logic ---
+    function generateCaptcha() {
+        const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        currentCaptcha = "";
+        for (let i = 0; i < 6; i++) {
+            currentCaptcha += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        document.getElementById('captcha-display').innerText = currentCaptcha;
+    }
+
+    // --- Login Logic ---
+    function toggleLoginModal() {
+        const modal = document.getElementById('login-modal');
+        modal.classList.toggle('hidden');
+        if (!modal.classList.contains('hidden')) {
+            generateCaptcha();
+            document.getElementById('login-error').classList.add('hidden');
+        }
+    }
+
+    async function handleLogin() {
+        const user = document.getElementById('login-username').value;
+        const pass = document.getElementById('login-password').value;
+        const captcha = document.getElementById('captcha-input').value;
+        const error = document.getElementById('login-error');
+
+        const hashedInput = await hashPassword(pass);
+
+        if (user === VALID_USER && hashedInput === HASHED_PW && captcha.toUpperCase() === currentCaptcha) {
+            alert("Login Successful!");
+            document.getElementById('login-nav-btn').classList.add('hidden');
+            document.getElementById('user-display').classList.remove('hidden');
+            toggleLoginModal();
+        } else {
+            error.classList.remove('hidden');
+            generateCaptcha();
+        }
+    }
+
+    document.getElementById('login-nav-btn').addEventListener('click', toggleLoginModal);
+
+    // --- Cart & Store Logic ---
     const search = document.getElementById('search');
     const cards = document.querySelectorAll('.card');
     const cartCountElement = document.getElementById('cart-count');
@@ -362,7 +459,6 @@
 
     let cart = {}; 
 
-    // --- Search Logic ---
     search.addEventListener('keyup', () => {
         let value = search.value.toLowerCase();
         cards.forEach(card => {
@@ -371,21 +467,13 @@
         });
     });
 
-    // --- Cart Window Display ---
     cartTrigger.addEventListener('click', () => {
         renderCart();
         cartModal.classList.remove('hidden');
     });
 
-    closeModal.addEventListener('click', () => {
-        cartModal.classList.add('hidden');
-    });
+    closeModal.addEventListener('click', () => cartModal.classList.add('hidden'));
 
-    window.addEventListener('click', (e) => {
-        if(e.target === cartModal) cartModal.classList.add('hidden');
-    });
-
-    // --- Shop Interaction Logic ---
     cards.forEach(card => {
         const buyBtn = card.querySelector('.buy-btn');
         const qtyControls = card.querySelector('.qty-controls');
@@ -400,7 +488,6 @@
             if (!cart[name]) cart[name] = { qty: 0, price: price };
             cart[name].qty += change;
             if (cart[name].qty <= 0) delete cart[name];
-
             const totalCount = Object.values(cart).reduce((a, b) => a + b.qty, 0);
             cartCountElement.innerText = totalCount;
         };
@@ -413,8 +500,7 @@
         });
 
         plusBtn.addEventListener('click', () => {
-            let val = parseInt(qtyNum.innerText) + 1;
-            qtyNum.innerText = val;
+            qtyNum.innerText = parseInt(qtyNum.innerText) + 1;
             updateState(1);
         });
 
@@ -431,11 +517,9 @@
         });
     });
 
-    // --- Render Items in Cart Window ---
     function renderCart() {
         cartItemsList.innerHTML = '';
         let total = 0;
-
         const items = Object.keys(cart);
         if (items.length === 0) {
             cartItemsList.innerHTML = '<p style="text-align:center; color:var(--muted)">Cart is empty</p>';
@@ -444,16 +528,11 @@
                 const item = cart[name];
                 const rowTotal = item.qty * item.price;
                 total += rowTotal;
-
                 cartItemsList.innerHTML += `
                     <div class="cart-item-row">
-                        <div>
-                            <strong>${name}</strong><br>
-                            <small>${item.qty} x ₹${item.price.toLocaleString()}</small>
-                        </div>
+                        <div><strong>${name}</strong><br><small>${item.qty} x ₹${item.price.toLocaleString()}</small></div>
                         <div style="font-weight:600">₹${rowTotal.toLocaleString()}</div>
-                    </div>
-                `;
+                    </div>`;
             });
         }
         totalAmountDisplay.innerText = total.toLocaleString();
